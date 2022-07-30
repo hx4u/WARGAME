@@ -46,12 +46,11 @@ class Server(object):
         self._httpd = None
 
     def Start(self, address, port):
-        print('web-server on:', (address, port))
-        MonitoringPortHandler.monitored_values = self.monits
-        #self._httpd = MonitoringPortServer((address, port),
-                                           #MonitoringPortHandler)
-        self._httpd = MonitoringPortServer((address, port))
-        threading.Thread(target=self._httpd.serve_forever).start()
+        if port:
+            print('web-server on:', (address, port))
+            MonitoringPortHandler.monitored_values = self.monits
+            self._httpd = MonitoringPortServer((address, port))
+            threading.Thread(target=self._httpd.serve_forever).start()
         return self.monits
 
     def Stop(self):
