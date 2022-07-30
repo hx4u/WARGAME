@@ -1,11 +1,11 @@
 # Ethereum Private Key Brute Force Attacker
 
-A simple, pure-python script to generate private keys and compare the
-resulting ETH addresses with a list of known values.  Strength of each
-guess is measured by the number of leading hexadecimal digits that match
-(other digits may match, but we don't count those).
+A simple, pure-python package to generate private keys and compare the
+resulting ETH addresses with a list of known values.
+The Strength of each guess is measured by the number of leading hexadecimal digits that match (other digits may match, but we don't count those yet).
 
 While running, the script shows its guesses WarGames-style.
+The script also opens up a port for prometheus style metrics scraping.
 
 ## Usage
 
@@ -13,26 +13,31 @@ While running, the script shows its guesses WarGames-style.
 Usage: brute_force_app.py [OPTIONS] [ETH_ADDRESS]...
 
 Options:
-  --port INTEGER        Monitoring port
-  --addresses FILENAME  Filename for yaml file containing target addresses.
-  --timeout INTEGER     If set to a positive integer, stop trying after this
-                        many seconds.
-  --fps INTEGER         Use this many frames per second when showing guesses.
-                        Use non-positive number to go as fast as possible.
-  --help                Show this message and exit.
+  --quiet                         Skip the animation
+  --strategy [trie|nearest|bisect]
+                                  Choose a lookup strategy for eth addresses
+  --no-port                       Disable monitoring port.
+  --port INTEGER                  Monitoring port for runtime metrics.
+  --addresses FILENAME            Filename for yaml file containing target
+                                  addresses.
+  --max-guesses INTEGER           If set to a positive integer, stop trying
+                                  after this many attempts.
+  --timeout INTEGER               If set to a positive integer, stop trying
+                                  after this many seconds.
+  --fps INTEGER                   Use this many frames per second when showing
+                                  guesses.  Use non-positive number to go as
+                                  fast as possible.
+  --help                          Show this message and exit.
 ```
 
-Thanks to
-[@vkobel/ethereum-generate-wallet](https://github.com/vkobel/ethereum-generate-wallet)
-for the pure-python implementation of ETH key generation.
+Thanks to [@vkobel/ethereum-generate-wallet](https://github.com/vkobel/ethereum-generate-wallet) for the pure-python implementation of ETH key generation.
 
 ## Why?
 
 I wanted a more tangible understanding of how hard it is to guess a
-private key before using it to store any non-trivial value.  I mean,
-_how hard could it be to guess someone else's key, **right**_?  As this
-script tries to show, it's basically impossible to collide with an
-already existing key.
+private key before using it to store any non-trivial value.
+I mean, _how hard could it be to guess someone else's key, **right**_?
+As this script tries to show, it's basically impossible to collide with an already existing key.
 
 How many leading digits can you match?  ;)
 
@@ -46,22 +51,16 @@ you have a 45000000 / 1157920892373161954235709850086879078532699846656405640394
 or 3.8862758497925e-70 chance of randomly guessing a private key associated with a public
 address.
 
-If you made O(100) random guesses per second, it would take you on roughly 1 trillion
-trillion trillion trillion years to guess one address (on average).  Clearly a short-cut
-is needed, but that's for another project.
+If you made O(1000) random guesses per second, it would take you on roughly 1 trillion trillion trillion trillion years to guess one address (on average).
+Clearly a short-cut is needed, but that's for another project. :wink:
 
 ## Python dependencies
 
-- click
-- ECDSA
-- pysha3
-- pyyaml
+This script uses python3.
+Its dependencies are listed in `requirements.txt`.
+Use `virtualenv` to install and execute this script without affecting your system's python3 distribution:
 
-This script uses python3.  Its dependencies are listed in
-`requirements.txt`.  Use virtualenv to install and execute this script
-without affecting your system's python3 distribution:
-
-```bash
+```shell
 $ virtualenv -p python3 venv
 $ . ./venv/bin/activate
 $ pip install -r requirements.txt
@@ -89,6 +88,8 @@ Strength     : 4 of 40 digits (10.00%)
 $ deactivate
 ```
 
+### Don't pollute your development environment
+
 Not recommended: you can skip the `virtualenv` steps and install the
 necessary dependencies to your system's python3 distribution:
 
@@ -98,7 +99,7 @@ $ python3 ./brute_force_app.py
 ...
 ```
 
-### Running in a container
+### Run it in a container
 
 You can also run this toy in a docker container.
 
@@ -112,7 +113,7 @@ $ docker pull evilegg/ethereum-private-key-attack
 $ docker run evilegg/ethereum-private-key-attack
 ```
 
-3. Or you can copy a yaml file containing the ETH addresses you wish to attack:
+3. Or you can copy a yaml file containing the ETH addresses you wish to target:
 ```bash
 $ docker run -it -v "$(PWD):/usr/src/app" evilegg/ethereum-private-key-attack python3 brute_force_app.py --addresses YOUR_YAML_FILE
 ```
@@ -127,9 +128,32 @@ $ cat YOUR_YAML_FILE | docker run -i evilegg/ethereum-private-key-attack ./brute
 $ cat YOUR_YAML_FILE | docker run -i -p 80:8120 evilegg/ethereum-private-key-attack ./brute_force_app.py --addresses /dev/stdin
 ```
 
-6. You can also skip the animations:
+6. You can also skip the animations, but what fun is that?
 ```bash
 $ docker run evilegg/ethereum-private-key-attack ./brute_force_app.py --quiet
+```
+
+## Strategies
+
+Currently, there are three strategies for looking up private key guesses against the known list of public addresses.
+
+## Monitoring
+
+If you specify a `--port` command line argument, the app listens on that port
+for HTTP GETs and will return some basic run-time statistics.
+
+## Validity
+
+You can confirm address generation using [this link](https://www.rfctools.com/ethereum-address-test-tool/).
+Copy and paste the `private-key` and compare against `address`:
+
+```
+» ./brute_force_app.py
+Loading known public ETH addresses375276 found.
+
+web-server on: ('', 8120)
+duration     attempts private-key                                                      str address
+00000.000187 00000001 d88d5d4dc45ce8e392908758e36f0b6c3def14b065d87565176fa574329eeb6e   4 720a519a2ffcf4109661a3a6de4aec66db1340f3
 ```
 
 ## Troubleshooting
@@ -182,22 +206,3 @@ $ docker run evilegg/ethereum-private-key-attack ./brute_force_app.py --quiet
     export LC_ALL=C.UTF-8
     export LANG=C.UTF-8
     ```
-
-## Monitoring
-
-If you specify a `--port` command line argument, the app listens on that port
-for HTTP GETs and will return some basic run-time statistics.
-
-## Validity
-
-You can confirm address generation using [this link](https://www.rfctools.com/ethereum-address-test-tool/).
-Copy and paste the `private-key` and compare against `address`:
-
-```
-» ./brute_force_app.py
-Loading known public ETH addresses375276 found.
-
-web-server on: ('', 8120)
-duration     attempts private-key                                                      str address
-00000.000187 00000001 d88d5d4dc45ce8e392908758e36f0b6c3def14b065d87565176fa574329eeb6e   4 720a519a2ffcf4109661a3a6de4aec66db1340f3
-```

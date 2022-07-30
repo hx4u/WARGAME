@@ -4,10 +4,19 @@ ETH addresses.
 """
 
 
+import bisect
 import sys
 
 
 import sortedcollections
+
+
+def hex_to_int(hex_address):
+    return int(hex_address, 16)
+
+
+def int_to_hex(bin_address):
+    return '%040x' % bin_address
 
 
 class Trie(object):
@@ -27,7 +36,7 @@ class Trie(object):
           \-> c -> d -> e
                     \-> f
          c -> d -> e -> f
-         
+
     This provides a much smaller memory footprint, but does not provide
     information on the nearest match.
     """
@@ -67,7 +76,7 @@ class Trie(object):
             if char not in trie:
                 break
             trie = trie[char]
-            
+
         # TODO walk the rest of the way down the trie to find the closest match
         nearest_match = None
         return count, hex_address, nearest_match
@@ -75,13 +84,12 @@ class Trie(object):
 
 class NearestDict(object):
     """Similar to EthereumAddressTrie, but use a NearestDict instead.
-    
+
     Equivalent speed, easily provides nearest match, uses standard library.
     """
     def __init__(self, list_of_addresses=None):
-        self._size = 0
         self._value = sortedcollections.NearestDict(
-                {int(addr, 16): True for addr in list_of_addresses})
+            {hex_to_int(addr): True for addr in list_of_addresses})
 
     def __len__(self):
         return len(self._value)
@@ -91,19 +99,53 @@ class NearestDict(object):
 
     def Extend(self, list_of_addresses):
         for addr in [t.lower() for t in list_of_addresses]:
-            self._value[int(addr, 16)] = True
+            self._value[hex_to_int(addr)] = True
 
     def FindClosestMatch(self, hex_address):
-        bin_addr = int(hex_address, 16)
-        nearest_match = '%040x' % self._value.nearest_key(bin_addr)
-        
+        bin_addr = hex_to_int(hex_address)
+        nearest_match = int_to_hex(self._value.nearest_key(bin_addr))
+
         strength = 0
         for lhs, rhs in zip(hex_address, nearest_match):
             # TODO return list of matches rather than integer so it's not just leading matches
             # strength += 1 if lhs == rhs else 0
             if lhs != rhs:
                 break
-            strength += 1    
-            
+            strength += 1
+
         return strength, hex_address, nearest_match
-        
+
+
+class BisectTuple(object):
+    def __init__(self, list_of_addresses=None):
+        self._value = tuple(sorted(hex_to_int(addr) for addr in list_of_addresses))
+
+    def __len__(self):
+        return len(self._value)
+
+    def sizeof(self):
+        return sys.getsizeof(self._value)
+
+    def FindClosestMatch(self, hex_address):
+        bin_addr = hex_to_int(hex_address)
+
+        idx = bisect.bisect(self._value, bin_addr)
+        nearest_match = int_to_hex(self._value[idx - 1])
+
+        strength = 0
+        for lhs, rhs in zip(hex_address, nearest_match):
+            # TODO return list of matches rather than integer so it's not just leading matches
+            # strength += 1 if lhs == rhs else 0
+            if lhs != rhs:
+                break
+            strength += 1
+
+        return strength, hex_address, nearest_match
+
+
+def PickStrategy(name_of_strategy):
+    strategy_map = {
+        'trie': Trie,
+        'nearest': NearestDict,
+        'bisect': BisectTuple}
+    return strategy_map.get(name_of_strategy, NearestDict)
