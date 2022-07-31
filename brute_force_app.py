@@ -26,13 +26,6 @@ ETH_ADDRESS_LENGTH = 40
 
 def calc_strength(guess, target) -> int:
     """Calculate the strength of an address guess"""
-    for matching_digits, (lhs, rhs) in enumerate(zip(guess, target)):
-        if lhs != rhs:
-            return matching_digits
-
-
-def calc_strength(guess, target) -> int:
-    """Calculate the strength of an address guess"""
     strength = 0
     for lhs, rhs in zip(guess, target):
         strength += 1 if lhs == rhs else 0
@@ -50,6 +43,32 @@ class SigningKey(ecdsa.SigningKey):
 
     def hexlify_public(self):
         return self._hexlify(self.get_verifying_key().to_string())
+
+    @staticmethod
+    def public_address(private_key_str=None):
+        if private_key_str is not None:
+            import binascii
+            _p = private_key_str.lower()
+            _p = bytes(_p, 'utf-8')
+            _p = binascii.unhexlify(_p)
+            priv = SigningKey.from_string(_p, curve=ecdsa.SECP256k1)
+        else:
+            priv = SigningKey.generate(curve=ecdsa.SECP256k1)
+
+        pub = priv.get_verifying_key().to_string()
+        keccak = sha3.keccak_256()
+        keccak.update(pub)
+        address = keccak.hexdigest()[24:]
+        return priv.hexlify_private(), address
+
+
+def test_get_public_address():
+    sample_data = {
+        '66873FDEF9BEC6F5D39D840CD7DDE4CA94270D3BF3AA9C5B372CDB5E07EADEFA': 'Dd36d7b54d489f4c2c0A7Ad57fc7180bAdD60072',
+        'C45910361C0BD601F8F1D93F53882EC7989160B97B095F3F4DA46F8206455761': '5EF98356CDd925203b5aeD05045dfd81A7667619',
+        }
+    for private_key, eth_address in sample_data.items():
+        assert (private_key.lower(), eth_address.lower()) == SigningKey.public_address(private_key)
 
 
 def GetResourcePath(*path_fragments):
@@ -180,13 +199,8 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
 
             varz.num_tries += 1
 
-            priv = SigningKey.generate(curve=ecdsa.SECP256k1)
-            pub = priv.get_verifying_key().to_string()
-
-            keccak = sha3.keccak_256()
-            keccak.update(pub)
-            address = keccak.hexdigest()[24:]
-
+            # calculate a public eth address from a random private key
+            private_key_hex, address = SigningKey.public_address() 
             current = target_addresses.FindClosestMatch(address)
             strength, _, closest = current
 
@@ -194,7 +208,7 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
                 if not quiet:
                     EchoLine(now - start_time,
                              varz.num_tries,
-                             priv.hexlify_private(),
+                             private_key_hex,
                              strength,
                              address,
                              closest)
@@ -206,7 +220,7 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
                 if not quiet:
                     EchoLine(now - start_time,
                              varz.num_tries,
-                             priv.hexlify_private(),
+                             private_key_hex,
                              strength,
                              address,
                              closest,
@@ -214,8 +228,7 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
                 varz.best_score = current
 
                 best_guess_report = {
-                    'private-key': priv.hexlify_private(),
-                    'public-key': priv.hexlify_public(),
+                    'private-key': private_key_hex,
                     'address': address,
                 }
                 if closest is not None:

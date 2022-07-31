@@ -206,3 +206,14 @@ duration     attempts private-key                                               
     export LC_ALL=C.UTF-8
     export LANG=C.UTF-8
     ```
+
+3. `pytest` is failing.
+
+   From https://stackoverflow.com/a/54597424:
+
+   > 1. activate your venv : source venv/bin/activate
+   > 2. install pytest : pip install pytest
+   > 3. re-activate your venv: deactivate && source venv/bin/activate
+   >
+   > The reason is that the path to pytest is set by the sourceing the activate file only after pytest is actually installed in the venv.
+   > You can't set the path to something before it is installed.
