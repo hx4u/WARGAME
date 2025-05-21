@@ -27,7 +27,14 @@ import targets
 ETH_ADDRESS_LENGTH = 40
 BALANCE_WORKER_COUNT = 8  # Number of balance checking threads
 
-
+def validate_port(port):
+    # Check if the port is within the valid range (0-65535)
+    if port < 0 or port > 65535:
+        print(f"Error: Port number {port} is out of the valid range (0-65535).")
+        return False
+    return True
+    
+    
 def calc_strength(guess, target) -> int:
     """Calculate the strength of an address guess"""
     strength = 0
@@ -92,14 +99,11 @@ def EchoLine(duration, attempts, private_key, strength, address, closest, balanc
 
 
 def EchoHeader():
-    """Write the names of the columns in our output to the console."""
-    click.secho('%-12s %-8s %-64s %-3s %-40s %-40s %s' % ('duration',
-                                                          'attempts',
-                                                          'private-key',
-                                                          'str',
-                                                          'address',
-                                                          'closest',
-                                                          'balance (ETH)'))
+    widths = [13, 9, 65, 4, 41, 45, 0]
+    headers = ["duration", "attempts", "private-key", "str", "address", "closest", "balance (ETH)"]
+    for w, h in zip(widths, headers):
+        click.secho(f"{h:<{w}}", fg='blue', bold=True, nl=False)
+    print()
 
 
 def fetch_balance(address, api_key):
@@ -171,8 +175,25 @@ def balance_worker(api_key, address_queue, balances_found, total_balance_lock, t
               default='found_addresses.txt',
               help='File to output found addresses with balances.')
 @click.argument('eth_address', nargs=-1)
+
+
+@click.option('--clear', is_flag=True, default=False, help='Clear the screen on startup.')
 @click.command()
-def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, apikeyfile, output, eth_address):
+def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, eth_address, apikeyfile, output, clear, ):
+    if clear:
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+
+    
+    if port is not None:
+        if not validate_port(port):
+            # Exit gracefully without crashing
+            return
+        
+        print(f"Port number {port} is valid.")
+        
+        
+        
     # Load Etherscan API key
     try:
         with open(apikeyfile, 'r') as f:
@@ -293,11 +314,14 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, a
                 varz.best_guess = best_guess_report
 
     except KeyboardInterrupt:
-        click.echo('\nGraceful shutdown initiated. Stopping address generation...')
+        click.echo('')      
+        click.secho('⚠ Shutdown initiated. ⚠', fg='red', bold=True)  
+        click.secho('⚠ Generation stopped. ⚠', fg='red', bold=True)
+        click.echo('')
         stop_event.set()
 
     # Start balance checking threads to finish checking remaining addresses
-    click.echo('Waiting for balance checks to finish...')
+        click.secho('♲ Verifying Balances. ♲ This will take a bit...', fg='green', bold=False) 
 
     with ThreadPoolExecutor(max_workers=BALANCE_WORKER_COUNT) as executor:
         futures = []
