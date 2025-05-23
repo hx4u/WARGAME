@@ -317,7 +317,6 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
         click.echo('')      
         click.secho('⚠ Shutdown initiated. ⚠', fg='red', bold=True)  
         click.secho('⚠ Generation stopped. ⚠', fg='red', bold=True)
-        click.echo('')
         stop_event.set()
 
     # Start balance checking threads to finish checking remaining addresses
