@@ -427,7 +427,7 @@ if __name__ == "__main__":
         click.command()
         sys.argv.append("--help")
         
-    main()  # this assumes main() is decorated with @click.command()
+        main()  # this assumes main() is decorated with @click.command()
     
     
     
