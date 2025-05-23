@@ -229,18 +229,7 @@ def cleanup_port(port):
                 p.wait(timeout=3)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
                 print(f"Failed to terminate process on port {port}: {e}")
-
-
-
-
-
-
-
-
-
-
-
-
+                
 @click.command()
 def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, eth_address, apikeyfile, output, clear):
     if clear:
@@ -254,7 +243,6 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
             atexit.register(cleanup_port, port)
             signal.signal(signal.SIGINT, lambda sig, frame: sys.exit(0))
         
-    display_banner()    
         
     # Load Etherscan API key
     try:
