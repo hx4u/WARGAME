@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Brute force well-known ETH addresses, WarGames-style.
-\
+
 Warning: this is utterly futile.  I've only done this to get a feel
 for how secure private keys are against brute-force attacks.
 """
@@ -13,10 +13,6 @@ import time
 import queue
 from concurrent.futures import ThreadPoolExecutor
 
-import signal
-import atexit
-import psutil
-
 import click
 import ecdsa
 import hashlib
@@ -27,61 +23,18 @@ import lookups
 import monitoring
 import targets
 
+
 ETH_ADDRESS_LENGTH = 40
 BALANCE_WORKER_COUNT = 8  # Number of balance checking threads
 
-@click.group()
-def cli():
-    pass
 
-def display_banner():
-    banner_text = (
-        "██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████\n"
-        "█░░░░░░██████████░░░░░░█░░░░░░░░░░░░░░█░░░░░░░░░░░░░░░░███░░░░░░░░░░░░░░█░░░░░░░░░░░░░░█░░░░░░██████████░░░░░░█░░░░░░░░░░░░░░█\n"   
-        "█░░▄▀░░██████████░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀▄▀░░███░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░░░░░░░░░░░░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█\n"   
-        "█░░▄▀░░██████████░░▄▀░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░░░░░░░▄▀░░███░░▄▀░░░░░░░░░░█░░▄▀░░░░░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░░░░░░░░░█\n"  
-        "█░░▄▀░░██████████░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░████░░▄▀░░███░░▄▀░░█████████░░▄▀░░██░░▄▀░░█░░▄▀░░░░░░▄▀░░░░░░▄▀░░█░░▄▀░░█████████\n"
-        "█░░▄▀░░██░░░░░░██░░▄▀░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░░░░░░░▄▀░░███░░▄▀░░█████████░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░██░░▄▀░░█░░▄▀░░░░░░░░░░█\n"
-        "█░░▄▀░░██░░▄▀░░██░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀▄▀░░███░░▄▀░░██░░░░░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░██░░▄▀░░██░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█\n"
-        "█░░▄▀░░██░░▄▀░░██░░▄▀░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░░░░░▄▀░░░░███░░▄▀░░██░░▄▀░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░░░░░██░░▄▀░░█░░▄▀░░░░░░░░░░█\n"
-        "█░░▄▀░░░░░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀░░█████░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██████████░░▄▀░░█░░▄▀░░█████████\n"
-        "█░░▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀░░░░░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██████████░░▄▀░░█░░▄▀░░░░░░░░░░█\n"
-        "█░░▄▀░░░░░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██████████░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█\n"
-        "█░░▄▀░░░░░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██████████░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█\n"
-        "█░░░░░░██░░░░░░██░░░░░░█░░░░░░██░░░░░░█░░░░░░██░░░░░░░░░░█░░░░░░░░░░░░░░█░░░░░░██░░░░░░█░░░░░░██████████░░░░░░█░░░░░░░░░░░░░░█\n"
-        "██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████\n"
-        "                                                                                                                              \n"
-        " Usage: python wargame.py [options] / python3 wargame.py [options]                                                            \n"
-        " Credits: LiteKira (kil_l_y) @hx4u / Tony Campbell (evilegg) - Version 2.1                                                    \n"
-        "\n"
-        "--fps n : Use this many frames per second when showing guesses. Use non-positive number to go as fast as possible.\n"
-        "--timeout n : If set to a positive integer, stop trying after this many. \n"
-        "--max-guesses n : If set to a positive integer, stop trying  after this many attempts. \n"
-        "--addresses addresses.yaml : Filename for yaml file containing target addresses. \n"
-        "--port n : Monitoring port for runtime metrics. \n"
-        "--no-port true / false : Disable monitoring port. \n"
-        "--strategy trie / nearest / bisect : Choose a lookup strategy for eth addresses \n"
-        "--quiet true / false : Skip the animation \n"
-        "--apikeyfile etherscan_api_key.txt : File containing your Etherscan API key. \n"
-        "--output found_addresses.txt : File to output found addresses with balances. \n"
-        "--clear true / false : Clear the screen on startup. \n"
-        "\n"
-        )
-    print(banner_text)
-
-def validate_port(port):
-    # Check if the port is within the valid range (0-65535)
-    if port < 0 or port > 65535:
-        print(f"Error: Port number {port} is out of the valid range (0-65535).")
-        return False
-    return True
-    
 def calc_strength(guess, target) -> int:
     """Calculate the strength of an address guess"""
     strength = 0
     for lhs, rhs in zip(guess, target):
         strength += 1 if lhs == rhs else 0
     return strength
+
 
 class SigningKey(ecdsa.SigningKey):
 
@@ -139,11 +92,14 @@ def EchoLine(duration, attempts, private_key, strength, address, closest, balanc
 
 
 def EchoHeader():
-    widths = [13, 9, 65, 4, 41, 45, 0]
-    headers = ["duration", "attempts", "private-key", "str", "address", "closest", "balance (ETH)"]
-    for w, h in zip(widths, headers):
-        click.secho(f"{h:<{w}}", fg='blue', bold=True, nl=False)
-    print()
+    """Write the names of the columns in our output to the console."""
+    click.secho('%-12s %-8s %-64s %-3s %-40s %-40s %s' % ('duration',
+                                                          'attempts',
+                                                          'private-key',
+                                                          'str',
+                                                          'address',
+                                                          'closest',
+                                                          'balance (ETH)'))
 
 
 def fetch_balance(address, api_key):
@@ -174,7 +130,7 @@ def balance_worker(api_key, address_queue, balances_found, total_balance_lock, t
             total_balance[0] += balance
         address_queue.task_done()
 
-@cli.command()
+
 @click.option('--fps',
               default=60,
               help='Use this many frames per second when showing guesses.  '
@@ -215,37 +171,8 @@ def balance_worker(api_key, address_queue, balances_found, total_balance_lock, t
               default='found_addresses.txt',
               help='File to output found addresses with balances.')
 @click.argument('eth_address', nargs=-1)
-@click.option('--clear', is_flag=True, default=False, help='Clear the screen on startup.')
-
-
-
-def cleanup_port(port):
-    """Find and kill processes using the specified port."""
-    for conn in psutil.net_connections(kind='inet'):
-        if conn.laddr.port == port:
-            try:
-                p = psutil.Process(conn.pid)
-                print(f"Terminating process PID {conn.pid} using port {port}...")
-                p.kill()
-
-                p.wait(timeout=3)
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
-                print(f"Failed to terminate process on port {port}: {e}")
-                
 @click.command()
-def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, eth_address, apikeyfile, output, clear):
-    if clear:
-        os.system('cls' if os.name == 'nt' else 'clear')
-
-    if port is not None:
-        if not validate_port(port):
-            return
-        print(f"Port number {port} is valid.")
-        if not no_port:
-            atexit.register(cleanup_port, port)
-            signal.signal(signal.SIGINT, lambda sig, frame: sys.exit(0))
-        
-        
+def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, apikeyfile, output, eth_address):
     # Load Etherscan API key
     try:
         with open(apikeyfile, 'r') as f:
@@ -366,14 +293,11 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
                 varz.best_guess = best_guess_report
 
     except KeyboardInterrupt:
-        click.echo('')      
-        click.secho('⚠ Shutdown initiated. ⚠', fg='red', bold=True)  
-        click.secho('⚠ Generation stopped. ⚠', fg='red', bold=True)
-        click.echo('')
+        click.echo('\nGraceful shutdown initiated. Stopping address generation...')
         stop_event.set()
 
     # Start balance checking threads to finish checking remaining addresses
-        click.secho('♲ Verifying Balances. ♲ This will take a bit...', fg='green', bold=False) 
+    click.echo('Waiting for balance checks to finish...')
 
     with ThreadPoolExecutor(max_workers=BALANCE_WORKER_COUNT) as executor:
         futures = []
@@ -421,46 +345,7 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
 
     httpd.Stop()
     return 0
-    
-if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        # No arguments supplied, show help
-        os.system('cls' if os.name == 'nt' else 'clear')
-        display_banner()
-        click.command()
-        sys.argv.append("--help")
-        main()  # this assumes main() is decorated with @click.command()
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
+
+if __name__ == '__main__':
+    sys.exit(main())
