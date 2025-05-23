@@ -1,10 +1,4 @@
-attrdict
-bs4
 click
-colorama
 ecdsa
 requests
-pysha3>=1.0.2
 pyyaml
-pytest
-sortedcollections
