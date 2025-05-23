@@ -178,6 +178,8 @@ def balance_worker(api_key, address_queue, balances_found, total_balance_lock, t
 
 
 @click.option('--clear', is_flag=True, default=False, help='Clear the screen on startup.')
+
+
 @click.command()
 def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, eth_address, clear, output, apikeyfile):
     with open(apikeyfile, 'r') as f:
