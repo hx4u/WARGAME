@@ -421,9 +421,7 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
 
     httpd.Stop()
     return 0
-
-def main():
-    cli()  # This is what triggers Click's CLI parsing
+    
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         # No arguments supplied, show help
@@ -431,8 +429,7 @@ if __name__ == "__main__":
         display_banner()
         click.command()
         sys.argv.append("--help")
-        
-main()  # this assumes main() is decorated with @click.command()
+        main()  # this assumes main() is decorated with @click.command()
     
     
     
