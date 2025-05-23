@@ -30,7 +30,9 @@ import targets
 ETH_ADDRESS_LENGTH = 40
 BALANCE_WORKER_COUNT = 8  # Number of balance checking threads
 
-
+@click.group()
+def cli():
+    pass
 
 def display_banner():
     banner_text = (
@@ -172,7 +174,7 @@ def balance_worker(api_key, address_queue, balances_found, total_balance_lock, t
             total_balance[0] += balance
         address_queue.task_done()
 
-
+@cli.command()
 @click.option('--fps',
               default=60,
               help='Use this many frames per second when showing guesses.  '
@@ -419,6 +421,9 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
 
     httpd.Stop()
     return 0
+
+def main():
+    cli()  # This is what triggers Click's CLI parsing
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         # No arguments supplied, show help
@@ -427,7 +432,7 @@ if __name__ == "__main__":
         click.command()
         sys.argv.append("--help")
         
-        main()  # this assumes main() is decorated with @click.command()
+main()  # this assumes main() is decorated with @click.command()
     
     
     
