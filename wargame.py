@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Brute force well-known ETH addresses, WarGames-style.
-
+\
 Warning: this is utterly futile.  I've only done this to get a feel
 for how secure private keys are against brute-force attacks.
 """
@@ -13,6 +13,10 @@ import time
 import queue
 from concurrent.futures import ThreadPoolExecutor
 
+import signal
+import atexit
+import psutil
+
 import click
 import ecdsa
 import hashlib
@@ -23,9 +27,32 @@ import lookups
 import monitoring
 import targets
 
-
 ETH_ADDRESS_LENGTH = 40
 BALANCE_WORKER_COUNT = 8  # Number of balance checking threads
+
+
+
+def display_banner():
+    banner_text = (
+        "██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████\n"
+        "█░░░░░░██████████░░░░░░█░░░░░░░░░░░░░░█░░░░░░░░░░░░░░░░███░░░░░░░░░░░░░░█░░░░░░░░░░░░░░█░░░░░░██████████░░░░░░█░░░░░░░░░░░░░░█\n"   
+        "█░░▄▀░░██████████░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀▄▀░░███░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░░░░░░░░░░░░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█\n"   
+        "█░░▄▀░░██████████░░▄▀░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░░░░░░░▄▀░░███░░▄▀░░░░░░░░░░█░░▄▀░░░░░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░░░░░░░░░█\n"  
+        "█░░▄▀░░██████████░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░████░░▄▀░░███░░▄▀░░█████████░░▄▀░░██░░▄▀░░█░░▄▀░░░░░░▄▀░░░░░░▄▀░░█░░▄▀░░█████████\n"
+        "█░░▄▀░░██░░░░░░██░░▄▀░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░░░░░░░▄▀░░███░░▄▀░░█████████░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░██░░▄▀░░█░░▄▀░░░░░░░░░░█\n"
+        "█░░▄▀░░██░░▄▀░░██░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀▄▀░░███░░▄▀░░██░░░░░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░██░░▄▀░░██░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█\n"
+        "█░░▄▀░░██░░▄▀░░██░░▄▀░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░░░░░▄▀░░░░███░░▄▀░░██░░▄▀░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░░░░░██░░▄▀░░█░░▄▀░░░░░░░░░░█\n"
+        "█░░▄▀░░░░░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀░░█████░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██████████░░▄▀░░█░░▄▀░░█████████\n"
+        "█░░▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀░░░░░░█░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██████████░░▄▀░░█░░▄▀░░░░░░░░░░█\n"
+        "█░░▄▀░░░░░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██████████░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█\n"
+        "█░░▄▀░░░░░░▄▀░░░░░░▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██░░▄▀▄▀▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█░░▄▀░░██░░▄▀░░█░░▄▀░░██████████░░▄▀░░█░░▄▀▄▀▄▀▄▀▄▀░░█\n"
+        "█░░░░░░██░░░░░░██░░░░░░█░░░░░░██░░░░░░█░░░░░░██░░░░░░░░░░█░░░░░░░░░░░░░░█░░░░░░██░░░░░░█░░░░░░██████████░░░░░░█░░░░░░░░░░░░░░█\n"
+        "██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████\n"
+        "                                                                                                                                          \n"
+        "                                                                                          Ussage: python wargame.py [options]             \n"
+        "                                                                                          Credits: LiteKira (kil_l_y) @hx4u - Version 1.0 \n"
+        )
+    print(banner_text)
 
 def validate_port(port):
     # Check if the port is within the valid range (0-65535)
@@ -34,14 +61,12 @@ def validate_port(port):
         return False
     return True
     
-    
 def calc_strength(guess, target) -> int:
     """Calculate the strength of an address guess"""
     strength = 0
     for lhs, rhs in zip(guess, target):
         strength += 1 if lhs == rhs else 0
     return strength
-
 
 class SigningKey(ecdsa.SigningKey):
 
@@ -175,24 +200,48 @@ def balance_worker(api_key, address_queue, balances_found, total_balance_lock, t
               default='found_addresses.txt',
               help='File to output found addresses with balances.')
 @click.argument('eth_address', nargs=-1)
-
-
 @click.option('--clear', is_flag=True, default=False, help='Clear the screen on startup.')
+
+
+
+def cleanup_port(port):
+    """Find and kill processes using the specified port."""
+    for conn in psutil.net_connections(kind='inet'):
+        if conn.laddr.port == port:
+            try:
+                p = psutil.Process(conn.pid)
+                print(f"Terminating process PID {conn.pid} using port {port}...")
+                p.kill()
+
+                p.wait(timeout=3)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
+                print(f"Failed to terminate process on port {port}: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
 @click.command()
-def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, eth_address, apikeyfile, output, clear, ):
+def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, eth_address, apikeyfile, output, clear):
     if clear:
         os.system('cls' if os.name == 'nt' else 'clear')
 
-
-    
     if port is not None:
         if not validate_port(port):
-            # Exit gracefully without crashing
             return
-        
         print(f"Port number {port} is valid.")
+        if not no_port:
+            atexit.register(cleanup_port, port)
+            signal.signal(signal.SIGINT, lambda sig, frame: sys.exit(0))
         
-        
+    display_banner()    
         
     # Load Etherscan API key
     try:
@@ -317,6 +366,7 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
         click.echo('')      
         click.secho('⚠ Shutdown initiated. ⚠', fg='red', bold=True)  
         click.secho('⚠ Generation stopped. ⚠', fg='red', bold=True)
+        click.echo('')
         stop_event.set()
 
     # Start balance checking threads to finish checking remaining addresses
@@ -368,7 +418,46 @@ def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, e
 
     httpd.Stop()
     return 0
-
-
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        # No arguments supplied, show help
+        os.system('cls' if os.name == 'nt' else 'clear')
+        display_banner()
+        click.command()
+        sys.argv.append("--help")
+        
+    main()  # this assumes main() is decorated with @click.command()
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
