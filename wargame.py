@@ -130,6 +130,10 @@ def balance_worker(api_key, address_queue, balances_found, total_balance_lock, t
             total_balance[0] += balance
         address_queue.task_done()
 
+@click.option('--apikeyfile',
+              type=click.Path(exists=True),
+              default='etherscan_api_key.txt',
+              help='Path to file containing Etherscan API key.')
 
 @click.option('--fps',
               default=60,
