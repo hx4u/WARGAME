@@ -171,8 +171,14 @@ def balance_worker(api_key, address_queue, balances_found, total_balance_lock, t
               default='found_addresses.txt',
               help='File to output found addresses with balances.')
 @click.argument('eth_address', nargs=-1)
+
+
+@click.option('--clear', is_flag=True, default=False, help='Clear the screen on startup.')
 @click.command()
-def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, apikeyfile, output, eth_address):
+def main(fps, timeout, max_guesses, addresses, port, no_port, strategy, quiet, eth_address, clear):
+    if clear:
+        os.system('cls' if os.name == 'nt' else 'clear')
+
     # Load Etherscan API key
     try:
         with open(apikeyfile, 'r') as f:
